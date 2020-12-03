@@ -1,4 +1,5 @@
- %%
+ %% Depends on gptoolbox, rf_tools, and matGeom (could be removed....)
+
 clear
 close all
 
@@ -62,7 +63,7 @@ SVp = laplacian_smooth(SV,SF,'uniform',[],.001);
 cut = W(:,1)<2 | W(:,1)>28;
 cut_idx = find(cut);
 
-cut_T = any(G==permute(cut_idx,[3,2,1]),[3,2]);
+cut_T = any(any(G==permute(cut_idx,[3,2,1]),3),2);
 G(cut_T,:) = [];
 
 [RV,IM,J,IMF] = remove_unreferenced(W,G);
@@ -75,7 +76,7 @@ boundary_edges=edge(boundary_edges_mask,:);
 boundary_edges_mutable = boundary_edges;
 
 boundary_edges_grouped = {};
-while(any(boundary_edges_mutable~=0,[1,2]))
+while(any(any(boundary_edges_mutable~=0,1),2))
 start = [find(boundary_edges_mutable(:,1)~=0,1),1];
 idx = [start(1),2];
 first = true;
@@ -192,7 +193,7 @@ text(m/2+1,n/2+1,20 * 4 /down_rate ,'Left/Right','Color','blue','FontSize',16);
 
 mask_brain = zeros(size(D));
 
-mask_brain = double(sqrt(((Xv-15).^2+(Yv-10).^2+(Zv/10*15-15).^2)) <3);
+mask_brain = double(sqrt(((Xv-15).^2+(Yv-15).^2+(Zv/10*15-15).^2)) <3.3);
 
 
 
@@ -385,9 +386,9 @@ brainbounds = [min(I) max(I);
           min(J) max(J);
           min(K) max(K);];
 
-brainbounds_e = brainbounds+[-2,1
-                           -2,1
-                           -2,1];
+brainbounds_e = brainbounds+[-1,1
+                           -1,1
+                           -1,1];
       
 %%      
 mb_extend = zeros(size(mask_brain));
@@ -411,20 +412,35 @@ unshimmed = zeros(size(Xv));
 %%
 mb_patch = zeros(size(mask_brain));
 mb_patch(D==1) = 2;
-ds = diff(brainbounds_e,1,2);
+ds = diff(brainbounds_e,1,2)+1;
 val = 3;
 for i = 0
-    for j = -5:5
-        for k = -5:5
+    for j = -2:2
+        for k = -2:2
             if k + j <= 0
                 val = 3;
             else 
-                val = 4;
+                val = 3;
+            end
+            if j>=0
+                tmp = padarray(mask_brain(:,1:(end-(j*ds(2))),:)==1,[0,min(j*ds(2),30),0],'pre');
+            else
+                tmp = padarray(mask_brain(:,1-(j*ds(2)):end,:)==1,[0,max(-j*ds(2),0),0],'post');
             end
             
-            mb_patch(min(max((brainbounds(1,1):brainbounds(1,2))+i*ds(1),1),30),...
-                min(max((brainbounds(2,1):brainbounds(2,2))+j*ds(2),1),30),...
-                min(max((brainbounds(3,1):brainbounds(3,2))+k*ds(3),1),20)) = val;
+            if k>=0
+                tmp = padarray(tmp(:,:,1:(end-(k*ds(3))))==1,[0,0,min(k*ds(3),20)],'pre');
+            else
+                tmp = padarray(tmp(:,:,1-(k*ds(3)):end)==1,[0,0,max(-k*ds(3),0)],'post');
+            end
+             
+            mb_patch(tmp==1) = val;
+            imagesc(squeeze(mb_patch(15,:,:)))
+
+                      
+%             mb_patch(min(max((brainbounds(1,1):brainbounds(1,2))+i*ds(1),1),30),...
+%                 min(max((brainbounds(2,1):brainbounds(2,2))+j*ds(2),1),30),...
+%                 min(max((brainbounds(3,1):brainbounds(3,2))+k*ds(3),1),20)) = val;
 %             val = val+1;
             
         end
@@ -438,9 +454,9 @@ mb_patch(mask_brain==1) = 1;
 mb_patch(D==0) = 0;
 
 
-for s = 10
+for s = 1:15
     imagesc([mb_patch(:,:,s) ; mb_extend(:,:,s)]); colorcet('L1'); axis equal;
-    pause(0.5);
+    pause(0.1);
 end
 
 %%
@@ -452,7 +468,7 @@ end
 
 tic;
 [shimmed,amps,db0,mask_used,filt] ...
-            = perform_shim_ncc_2s_fetal_yalmip(unshimmed,mb_patch,reshape(coil_loop.b,[size(Xv),size(coil_loop.b,2)]),...
+            = perform_shim_ncc_2s_fetal_yalmip(unshimmed,mb_patch,reshape(b*boundary_matrix,[size(Xv),size(boundary_matrix,2)]),...
                                             50,20000,90/.66,1000/.66);
 toc;
 

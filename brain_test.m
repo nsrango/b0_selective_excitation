@@ -36,7 +36,7 @@ handles.fm.unshimmed = unwrap_phase(handles.fm, handles.delta_TE);
 [nx,ny,nz] = size(handles.fm.unshimmed);
 [X,Y,Z] = meshgrid(1:nx,1:ny,1:2:nz*2);
 
-mask_excite = sqrt(((X-nx/2+15).^2+(Y-ny/2).^2+(Z-nz*2/2-10).^2))<=10;
+mask_excite = sqrt(((X-nx/2+20).^2+(Y-ny/2+10).^2+(Z-nz*2/2+25).^2))<=8;
 
 idxs = find(mask_excite(:,:,:)==1 & handles.fm.mask(:,:,:)~=0);
 [I,J,K] = ind2sub(size(mask_excite),idxs);
@@ -44,9 +44,9 @@ idxs = find(mask_excite(:,:,:)==1 & handles.fm.mask(:,:,:)~=0);
 excite_bounds = [min(I) max(I);
           min(J) max(J);
           min(K) max(K);];
-excite_bounds = excite_bounds+[-10,15
-                           -0,0
-                           -10,15]; 
+excite_bounds = excite_bounds+[-0,0
+                           -5,5
+                           -5,5]; 
                        
 excite_bounds = max(min(excite_bounds, size(mask_excite)'),[1;1;1]);                 
 
@@ -66,13 +66,58 @@ mb_extend_con((mask_excite==1)) = 1 ;
 mb_extend_con = int16(mb_extend_con).*int16(D);
 
 
-imagesc(mb_extend(:,:,37))
+imagesc(mb_extend(:,:,25))
+
+%%
+
+mb_patch = zeros(size(mask_excite));
+mb_patch(D==1) = 2;
+ds = diff(excite_bounds,1,2)+1;
+val = 3;
+for i = 0
+    for j = -5:5
+        for k = -5:5
+            if k + j <= 0
+                val = 3;
+            else 
+                val = 3;
+            end
+            if j>=0
+                tmp = padarray(mask_excite(:,1:(end-(j*ds(2))),:)==1,[0,min(j*ds(2),size(mask_excite,2)),0],'pre');
+            else
+                tmp = padarray(mask_excite(:,1-(j*ds(2)):end,:)==1,[0,max(-j*ds(2),0),0],'post');
+            end
+            
+            if k>=0
+                tmp = padarray(tmp(:,:,1:(end-(k*ds(3))))==1,[0,0,min(k*ds(3),size(mask_excite,3))],'pre');
+            else
+                tmp = padarray(tmp(:,:,1-(k*ds(3)):end)==1,[0,0,max(-k*ds(3),0)],'post');
+            end
+             
+            mb_patch(tmp==1) = val;
+            imagesc(squeeze(mb_patch(:,:,37)))
+        end
+    end
+end
+
+mb_patch(excite_bounds(1,1):excite_bounds(1,2),excite_bounds(2,1):excite_bounds(2,2),excite_bounds(3,1):excite_bounds(3,2)) = 2;
+
+
+mb_patch(mask_excite==1) = 1;
+mb_patch(D==0) = 0;
+
+
+for s = 25
+    imagesc([mb_patch(:,:,s) ; mb_extend(:,:,s)]); colorcet('L1'); axis equal;
+    pause(0.1);
+end
 
 %%
 
 [shimmed,amps,db0,mask_used,filt] ...
-           = perform_shim_ncc_fetal(handles.fm.unshimmed,mb_extend,handles.fm.coil_fm,...
-                                           3,50,{100,1e7,100,0,0,0.9, 1000, inf});
+           = perform_shim_ncc_2s_fetal_yalmip(handles.fm.unshimmed,mb_patch,handles.fm.coil_fm,...
+                                           50,5000,200,1000);
+
 
 N=1024;
 
@@ -152,17 +197,17 @@ bodybounds = [min(I) max(I);
           min(K) max(K);];      
 
 boxmask = zeros(size(mask_excite));
-boxmask(bounds(1,1):bounds(1,2),bounds(2,1):bounds(2,2),bounds(3,1):bounds(3,2)) = 1;
+boxmask(excite_bounds(1,1):excite_bounds(1,2),excite_bounds(2,1):excite_bounds(2,2),excite_bounds(3,1):excite_bounds(3,2)) = 1;
 bodybox = zeros(size(mask_excite));
 bodybox(bodybounds(1,1):bodybounds(1,2),bodybounds(2,1):bodybounds(2,2),bodybounds(3,1):bodybounds(3,2)) = 1;
 
 
-for s = 20:45
+for s = 1:75
     
    
     [B,L] = bwboundaries(mask_excite(:,:,s)==1,'noholes');
     [B2,L2] = bwboundaries(boxmask(:,:,s)==1,'noholes');
-    [B3,L3] = bwboundaries(bodybox(:,:,s)==1,'noholes');
+    [B3,L3] = bwboundaries(mb_patch(:,:,s)>=3,'noholes');
 
     imagesc((D(:,:,s)~=0).*abs(ex(:,:,s)),'parent',a1,[0,1]);
         axis off;
@@ -178,7 +223,7 @@ for s = 20:45
     end
     for k = 1:length(B3)
        boundary = B3{k};
-       plot(a1,boundary(:,2), boundary(:,1), 'blue', 'LineWidth', 2);
+       plot(a1,boundary(:,2), boundary(:,1), 'red', 'LineWidth', 2);
     end
     hold(a1, 'off');
    
@@ -191,7 +236,7 @@ for s = 20:45
     axis off;
     
     
-    pause(0.5);
+    pause(0.1);
 end
 
 
